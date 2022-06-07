@@ -89,16 +89,17 @@ year_batting_summary <- Batting %>%
                total_abs = sum(AB,na.rm = TRUE), .groups = "drop") %>%
      mutate(batting_avg = total_hits / total_abs)
 
-
+library(gt)
 year_batting_summary %>%
      dplyr::select(yearID, batting_avg) %>%
      rename(Year = yearID, `Batting AVG` = batting_avg) %>%
      arrange(desc(`Batting AVG`)) %>%
      slice(1:3, n()) %>% # n() is used within tidy functions, otherwise use nrows
      gt() %>%
-     tab_header()
+     tab_header(title = "Best / worst MLB Seasons by AVG",
+                subtitle = "Top / bottom three are presented")
 
-
+summary(Batting)
 ```
 
 ## Notes: 
