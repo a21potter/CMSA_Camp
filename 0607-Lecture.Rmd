@@ -9,22 +9,103 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Goal
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Exploring the Lahman dataset
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Shortcut: command shift r - adds section label which allows for collapsible comments in R script file
 
-```{r cars}
-summary(cars)
+## Packages
+
+```{r}
+library(tidyverse)
+library(Lahman)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+## Initial Examination of Data
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+Batting <- as_tibble(Batting)
+dim(Batting)
+class(Batting)
+
+head(Batting, 10)
+tail(Batting, 10)
+
+colnames(Batting)
+names(Batting)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## EDA
+
+```{r}
+summary(Batting$yearID) # summarizing quantitative column
+table(Batting$lgID) # summarizing categorical column
+
+any(is.na(Batting$lgID)) # are any of vector elements true
+
+mlb_batting <- Batting %>%
+     filter(lgID == "AL" | lgID == "NL")
+     # alternate filter: filter(lgID %in% c("AL", "NL"))
+
+sel_batting <- Batting %>%
+     dplyr::select(yearID, lgID, G, AB, R, H, HR, BB, SO)
+
+arrange(Batting, desc(HR))
+
+Batting %>%
+     summarize(max(stint), min(stint))
+
+new_batting <- Batting %>%
+     mutate(batting_avg = H / AB)
+
+# piping
+# compute batting average
+Batting %>%
+     filter(lgID == "AL" | lgID == "NL", AB > 300) %>%
+     mutate(batting_avg = H / AB) %>%
+     arrange(desc(batting_avg)) %>%
+     dplyr::select(playerID, yearID, batting_avg) %>%
+     head(n = 5) # slice to access specific rows
+
+Batting %>%
+     filter(lgID == "AL" | lgID == "NL", AB > 300) %>%
+     mutate(batting_avg = H / AB) %>%
+     group_by(yearID) %>%
+     summarize(hr = sum(HR), so = sum(SO), b = sum(BB), .groups = "drop") %>% 
+     # use .groups = "drop" to get rid of previous groups - will use often
+     # same as ungroup(), but ungroup is more outdated
+     arrange(desc(hr)) %>%
+     head(5)
+
+year_batting_summary <- Batting %>%
+     filter(lgID %in% c("AL", "NL")) %>%
+     group_by(yearID) %>%
+     summarize(total_hits = sum(H, na.rm = TRUE),
+               total_hrs = sum(HR, na.rm = TRUE),
+               total_ks = sum(SO, na.rm = TRUE),
+               total_walks = sum(BB, na.rm = TRUE),
+               total_abs = sum(AB,na.rm = TRUE), .groups = "drop") %>%
+     mutate(batting_avg = total_hits / total_abs)
+
+
+year_batting_summary %>%
+     dplyr::select(yearID, batting_avg) %>%
+     rename(Year = yearID, `Batting AVG` = batting_avg) %>%
+     arrange(desc(`Batting AVG`)) %>%
+     slice(1:3, n()) %>% # n() is used within tidy functions, otherwise use nrows
+     gt() %>%
+     tab_header()
+
+
+```
+
+## Notes: 
+
+- R attempt at object oriented programming uses @ for accessing objects
+- reference variables with spaces included with back ticks surrounding the name
+- n() is used within tidy functions, otherwise use nrows
+
+
+
