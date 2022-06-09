@@ -1,0 +1,483 @@
+---
+title: "Lecture-0608"
+author: "Amber Potter"
+date: "6/9/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## New dataset - 2021 MVP Shohei Ohtani's batted balls
+
+Created dataset of batted balls by the American League MVP Shohei Ohtani in 2021 season using [`baseballr`](http://billpetti.github.io/baseballr/):
+
+```{r load-ohtani, warning = FALSE, message = FALSE}
+library(tidyverse)
+ohtani_batted_balls <- 
+  read_csv("http://www.stat.cmu.edu/cmsac/sure/2022/materials/data/sports/xy_examples/ohtani_2021_batted_balls.csv")
+head(ohtani_batted_balls)
+```
+
+--
+- each row / observation is a batted ball from Ohtani's 2021 season
+
+--
+- __Categorical__ / qualitative variables: `pitch_type`, `batted_ball_type`, `outcome`
+
+--
+- __Continuous__ / quantitative variables: `hit_x`, `hit_y`, `exit_velocity`, `launch_angle`
+
+---
+
+## Visualizing 1D categorical data
+
+How can we summarize `batted_ball_type` and other categorical variables?
+
+--
+- We make a __bar chart__ with [`geom_bar()`](https://ggplot2.tidyverse.org/reference/geom_bar.html)
+
+```{r batted-ball-bar}
+ohtani_batted_balls %>%
+  ggplot(aes(x = batted_ball_type)) +
+  geom_bar() + #<<
+  theme_bw()
+```
+
+- Only map `batted_ball_type` to the x-axis
+
+- Counts of each type are displayed on y-axis...
+
+
+## Remember statistical summaries!
+
+From [Chapter 3 of `R` for Data Science](https://r4ds.had.co.nz/data-visualisation.html)
+
+---
+
+## What does a bar chart show?
+
+__Marginal distribution__: probability that categorical variable X (e.g., `batted_ball_type`) takes each particular value x (e.g. `fly_ball`); how a single column of our dataset vary marginally within complete dataset.
+--
+  _So how do we display the individual probabilities?_
+--
+
+```{r batted-ball-bar-prop}
+ohtani_batted_balls %>%
+  ggplot(aes(x = batted_ball_type)) +
+     # probability/proportion on y axis
+  geom_bar(aes(y = after_stat(count) / sum(after_stat(count)))) + #have to do this in geom_bar not ggplot
+  theme_bw()
+```
+
+- [`after_stat()`](https://ggplot2.tidyverse.org/reference/aes_eval.html) indicates the aesthetic mapping is performed after the statistical transformation
+
+- Use `after_stat(count)` to access the `stat_count()` called by `geom_bar()`
+
+- __We can code this in a more clear way__
+
+---
+
+## Compute and display the proportions directly
+
+
+```{r batted-ball-bar-prop2}
+ohtani_batted_balls %>%
+  group_by(batted_ball_type) %>% #<<
+  summarize(count = n()) %>% #<<
+  ungroup() %>% #<<
+  mutate(total = sum(count), #<<
+         prop = count / total) %>% #<<
+  ggplot(aes(x = batted_ball_type)) +
+  geom_bar(aes(y = prop), #<<
+           stat = "identity") + # for using previously calculated y value
+  theme_bw()
+```
+
+- Category counts give info about sample size, but this could be labeled in the chart
+
+- Proportions $=$ the __probability mass function__ (PMF) for __discrete__ variables 
+  - e.g. $P$ (`batted_ball_type` $=$ `fly_ball`)
+
+---
+
+## Population versus sample...
+
+We have the __population__ of Ohtani's batted balls in the 2021 season
+--
+$\Rightarrow$ __we know the true probabilities__:
+
+- $P$ (`batted_ball_type` $=$ `fly_ball`) 
+- $P$ (`batted_ball_type` $=$ `ground_ball`)
+- $P$ (`batted_ball_type` $=$ `line_drive`)
+- $P$ (`batted_ball_type` $=$ `popup`)
+
+
+--
+_What if we pretend this is a sample from all hypothetical Ohtani 2021 seasons_?
+
+
+--
+__Empirical distribution__: We __estimate__ the __true marginal__ distribution with __observed (sample) data__
+
+Estimate $P$ (`batted_ball_type` = $C_j$) with $\hat{p}_j$ for each category $C_j$ (e.g. $\hat{p}_{\texttt{fly_ball}}$)
+
+
+--
+Compute __standard error__ for each $\hat{p}_j$:
+
+--
+
+$$
+SE(\hat{p}_j) = \sqrt{\frac{\hat{p}_j ( 1 - \hat{p}_j)}{n}}
+$$
+
+For large $n$ $\Rightarrow$ $\approx$ 95% __confidence interval (CI)__: $\hat{p}_j +/- 2 \cdot SE(\hat{p}_j)$
+
+---
+
+## Add confidence intervals to bar chart
+
+
+```{r bar-intervals}
+ohtani_batted_balls %>%
+  group_by(batted_ball_type) %>% 
+  summarize(count = n()) %>% 
+  ungroup() %>% 
+  mutate(total = sum(count),
+         prop = count / total,
+         se = sqrt(prop * (1 - prop) / total),  #<<
+         lower = prop - 2 * se,  #<<
+         upper = prop + 2 * se) %>% #<<
+  ggplot(aes(x = batted_ball_type)) +
+  geom_bar(aes(y = prop),
+           stat = "identity") + 
+  geom_errorbar(aes(ymin = lower, #<<
+                    ymax = upper), #<<
+                color = "red") + #<<
+  theme_bw()
+```
+
+__Be careful about your interpration of CIs...__
+
+_You should remember to label your charts!_
+
+
+## Fun with factors using [`forcats`](https://forcats.tidyverse.org/)
+
+
+```{r bar-factors}
+ohtani_batted_balls %>%
+  group_by(batted_ball_type) %>% 
+  summarize(count = n()) %>% 
+  ungroup() %>% 
+  mutate(total = sum(count),
+         prop = count / total,
+         se = sqrt(prop * (1 - prop) / total),  
+         lower = prop - 2 * se, 
+         upper = prop + 2 * se,
+         batted_ball_type = #<<
+           fct_reorder(batted_ball_type, #<< reorder variables
+                       desc(prop))) %>% #<< default ascending
+  ggplot(aes(x = batted_ball_type)) +
+  geom_bar(aes(y = prop),
+           stat = "identity") + 
+  geom_errorbar(aes(ymin = lower, 
+                    ymax = upper),
+                color = "red") + 
+  theme_bw()
+```
+
+---
+
+## Did you say pie chart?
+
+[](https://cdn.vox-cdn.com/uploads/chorus_asset/file/3500550/0003VL-9150.0.jpeg)
+
+--
+__This is the only pie chart I will show you all summer__
+
+---
+
+## Describing 1D continuous data
+
+How can we summarize `exit_velocity` and other continuous variables?
+
+--
+- __Center__: mean, median, number and location of modes
+
+- __Spread__: range (max - min), quantiles, variance (standard deviation), etc.
+
+- __Shape__: skew vs symmetry, outliers, heavy vs light tails, etc.
+
+- Compute basic summary statistics
+
+```{r exit-velo-summary}
+summary(ohtani_batted_balls$exit_velocity)
+
+
+sd(ohtani_batted_balls$exit_velocity) # does not work because of NAs
+sd(ohtani_batted_balls$exit_velocity, na.rm = TRUE)
+```
+
+
+---
+
+## Box plots visualize summary statistics
+
+
+- We make a __box plot__ with [`geom_boxplot()`](https://ggplot2.tidyverse.org/reference/geom_boxplot.html)
+
+
+### Visualize exit velocity
+
+```{r boxplot}
+ohtani_batted_balls %>%
+  ggplot(aes(y = exit_velocity)) + #<<
+  geom_boxplot(aes(x = "")) + #<< for when we make a single boxplot to avoid numerical x axis values
+  theme_bw() +
+  coord_flip() #<< good for single boxplot
+```
+
+- __Pros__:
+  - Displays outliers, percentiles, spread, skew
+  - Useful for side-by-side comparison (tomorrow)
+
+- __Cons__:
+  - Does not display the full distribution shape!
+  - Does not display modes
+  
+boxplots have very limited use because they dont show the shape of the data beyond a simple intuition about the direction of a tail
+
+histograms are the most useful to show the shape and distribution of our data
+  
+---
+
+## Histograms display 1D continuous distributions
+
+
+- We make __histograms__ with [`geom_histogram()`](https://ggplot2.tidyverse.org/reference/geom_histogram.html)
+
+```{r histogram}
+ohtani_batted_balls %>%
+  ggplot(aes(x = exit_velocity)) + #<<
+  geom_histogram() + #<<
+  theme_bw() 
+```
+
+
+$$
+\text{# total obs.} = \sum_{j=1}^k \text{# obs. in bin }j
+$$
+
+- __Pros__:
+  - Displays full shape of distribution
+  - Easy to interpret
+
+- __Cons__:
+  - Have to choose number of bins and bin locations (will revisit later)
+     - this is an estimate, we have to guess what the true distribution looks like when we choose bins. different numbers of bins makes the distribution look different
+---
+
+## Display the data points directly with beeswarm plots
+
+
+
+- We make a __beeswarm plot__ using the  [`ggbeeswarm` package](https://github.com/eclarke/ggbeeswarm)
+
+
+```{r beeswarm}
+library(ggbeeswarm)
+ohtani_batted_balls %>%
+  ggplot(aes(y = exit_velocity)) + 
+  geom_beeswarm(aes(x = ""), #<<
+                cex = 3) + #<<
+  theme_bw() +
+  coord_flip()
+```
+
+- __Pros__:
+  - Displays each data point
+  - Easy to view full shape of distribution
+  - nice for small datasets
+
+- __Cons__:
+  - Can be overbearing with large datasets -> can potentially get around this by plotting a random sample of your points
+  - Which algorithm for arranging points?
+  - points on the bottom offer redundant information
+
+_What does `cex = 3` do?_
+
+---
+
+## Smooth summary with violin plots
+
+
+- We make __violin plots__ with [`geom_violin()`](https://ggplot2.tidyverse.org/reference/geom_violin.html)
+
+```{r violin}
+ohtani_batted_balls %>%
+  ggplot(aes(y = exit_velocity)) + 
+  geom_violin(aes(x = "")) + #<<
+  theme_bw() +
+  coord_flip()
+```
+
+- __Pros__:
+  - Displays full shape of distribution
+  - Can easily layer...
+  
+
+Beeswarm and violin plots are normally not used by themselves. 
+
+Add a boxlplot on top of a violin plot. Use a smaller width for the boxpots so it does not cover the violin plot.
+---
+
+## Smooth summary with violin plots + box plots
+
+- We make __violin plots__ with [`geom_violin()`](https://ggplot2.tidyverse.org/reference/geom_violin.html)
+
+```{r violin-box, eval = FALSE}
+ohtani_batted_balls %>%
+  ggplot(aes(y = exit_velocity,
+             x = "")) + 
+  geom_violin() + 
+  geom_boxplot(width = .2) + #<<
+  theme_bw() +
+  coord_flip()
+```
+
+- __Pros__:
+  - Displays full shape of distribution
+  - Can easily layer... with box plots on top
+  
+- __Cons__:
+  - Summary of data via __density estimate__ 
+  - Mirror image is duplicate information
+
+
+---
+
+### What do visualizations of continuous distributions display?
+
+__Probability that continuous variable X takes a particular value is 0__ 
+
+e.g. $P$ (`exit_velocity` $= 100$) $= 0$, _why_?
+
+
+--
+Instead we use the __probability density function (PDF)__ to provide a __relative likelihood__ 
+
+- Density estimation is the focus of lecture next Monday
+
+
+--
+For continuous variables we can use the __cumulative distribution function (CDF)__,
+
+$$
+F(x) = P(X \leq x)
+$$
+
+--
+For $n$ observations we can easily compute the __Empirical CDF (ECDF)__:
+
+
+$$\hat{F}_n(x)  = \frac{\text{# obs. with variable} \leq x}{n} = \frac{1}{n} \sum_{i=1}^{n}1(x_i \leq x)$$
+
+- where $1()$ is the indicator function, i.e. `ifelse(x_i <= x, 1, 0)`,(Note: indicator function 1 does not require special font)
+
+---
+
+
+
+## Display full distribution with ECDF plot
+
+- We make __ECDF plots__ with [`stat_ecdf()`](https://ggplot2.tidyverse.org/reference/stat_ecdf.html)
+
+```{r ecdf}
+ohtani_batted_balls %>%
+  ggplot(aes(x = exit_velocity)) + 
+  stat_ecdf() + #<<
+  theme_bw()
+```
+
+- __Pros__:
+  - ECDF displays all information in data (except for order)
+  - As $n \rightarrow \infty$, our ECDF $\hat{F}_n(x)$ converges to the true CDF $F(x)$
+  - Easy to interpret...
+  
+- __Cons__:
+  - ... and yet it's not as popular! (probably because it is cumulative)
+  
+---
+
+## Rug plots display raw data
+
+
+- We make a __rug plot__ with [`geom_rug()`](https://ggplot2.tidyverse.org/reference/geom_rug.html)
+
+
+```{r rugplot}
+ohtani_batted_balls %>%
+  ggplot(aes(x = exit_velocity)) + #<<
+  geom_rug(alpha = 0.7) + #<<
+  theme_bw()
+```
+
+- __Pros__:
+  - Displays raw data points
+  - Useful supplement for summaries and 2D plots...
+
+- __Cons__:
+  - Can be overbearing for larger datasets
+
+---
+
+## Rug plots supplement other displays
+
+
+
+```{r rugplot-hist}
+ohtani_batted_balls %>%
+  ggplot(aes(x = exit_velocity)) + #<<
+  geom_rug(alpha = 0.7) + #<<
+  geom_histogram() + #<<
+  theme_bw()
+```
+
+
+```{r rugplot-ecdf}
+ohtani_batted_balls %>%
+  ggplot(aes(x = exit_velocity)) + #<<
+  geom_rug(alpha = 0.7) + #<<
+  stat_ecdf() + #<<
+  theme_bw()
+```
+
+**histogram plots the derivative of the ecdf plot**
+
+---
+
+## Scatterplots for 2D continuous data
+
+Joint distributions
+
+- We make a __scatterplot__ with [`geom_point()`](https://ggplot2.tidyverse.org/reference/geom_point.html)
+
+
+```{r scatter}
+ohtani_batted_balls %>%
+  ggplot(aes(x = exit_velocity, #<<
+             y = launch_angle)) + #<<
+  geom_point(alpha = 0.4) + #<<
+  geom_rug(alpha = 0.4) + #<<
+  theme_bw()
+```
+
+_Easy to supplement with rug plots_ (dont need to include rug plots on every plot)
+
+__Look at the plot__: what question would you want to ask, assuming you know something about baseball?
+
+_To be continued..._
+  
