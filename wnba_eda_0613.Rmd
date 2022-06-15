@@ -1,0 +1,175 @@
+---
+title: "eda-lab-0613"
+author: "Amber Potter"
+date: "6/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages
+
+```{r}
+library(tidyverse)
+library(wehoop)
+```
+
+## Purpose: Exploring WNBA Data
+
+```{r}
+wnba_pbp_data <- load_wnba_pbp(2022)
+
+# Get the shots and clean this data a bit:
+wnba_shots_data <- wnba_pbp_data %>%
+  filter(shooting_play)
+# Remove unnecessary columns:
+wnba_shots_data <- wnba_shots_data %>%
+  dplyr::select(-shooting_play, -id, -participants_2_athlete_id,
+                -type_abbreviation, -season, -season_type, 
+                -home_team_spread, -game_spread, -home_favorite) 
+# Save this file:
+write_csv(wnba_shots_data, 
+          "data/wnba_shots_2022.csv")
+
+```
+
+- home vs away - bar graph position = "fill"
+
+- points over time - facet by team, plot home and away average scores over time
+
+- points by team
+
+- first half vs second half - bar graph, position = "fill"
+
+- shot type - regroup/recombine shot type names - standard bar graph
+
+- scatter plot - time on x axis, each shot is a point, colored
+
+
+-----------
+
+## Ideas
+
+- shots first half vs second half - bar graph, position = "fill"
+
+- points over time - facet by team, plot home and away average scores over time - line graph
+
+- x and y coordin.- scatter/hex/heatmap
+
+
+## First:
+
+### Does the home team have an advantage?
+
+```{r}
+wnba_shots_data <- wnba_shots_data %>%
+     mutate(total_seconds = ((((period_number - 1) * 10) * 60) + ((10 - as.numeric(clock_minutes)) * 60) + (60 - as.numeric(clock_seconds)))/60,
+            away_team = paste0(away_team_name, " ", away_team_mascot),
+            home_team = paste0(home_team_name, " ", home_team_mascot)) %>%
+     mutate(scoring_team = case_when(team_id == home_team_id ~ home_team,
+                                     team_id == away_team_id ~ away_team)) %>%
+     mutate(home_away = case_when(team_id == home_team_id ~ "Home",
+                                     team_id == away_team_id ~ "Away")) %>%
+     mutate(team_score = case_when(team_id == home_team_id ~ home_score,
+                                     team_id == away_team_id ~ away_score))
+     
+
+
+wnba_shots_data %>%
+     filter(scoring_play) %>%
+     ggplot() +
+     geom_point(aes(x = total_seconds, y = team_score, color = home_away), 
+                alpha = .1) +#+
+     geom_smooth(aes(x = total_seconds, y = team_score, color = home_away), 
+                 se = FALSE, alpha = .7) +
+    ggthemes::scale_color_tableau() +
+     facet_wrap(~scoring_team) +
+     theme_minimal() +
+     labs(x = "Minutes",
+          y = "Team Points",
+          color = "Home or Away",
+          title = "Being the home team is not as much of an advantage as one might think")
+```
+
+## Second
+
+### Are layups the most accurate shot?
+
+```{r}
+#n(wnba_shots_data$shot_type)
+
+wnba_shots_data <- wnba_shots_data %>%
+     mutate(shot_type = case_when(grepl("Layup", type_text, fixed = TRUE) ~ "Layup",
+                                  grepl("Jump Shot", type_text, fixed = TRUE) ~ "Jump Shot",
+                                  grepl("Free Throw", type_text, fixed = TRUE) ~ "Free Throw",
+                                  grepl("Tip Shot", type_text, fixed = TRUE) ~ "Tip Shot",
+                                  grepl("Hook", type_text, fixed = TRUE) ~ "Hook Shot",
+                                  grepl("Dunk", type_text, fixed = TRUE) ~ "Dunk"))
+
+
+
+
+
+wnba_shots_data %>%
+     group_by(shot_type) %>%
+     summarize(shot_type,
+               count = mean(scoring_play), 
+               scoring_play) %>%
+     ggplot(aes(x = shot_type, y = count, fill = scoring_play)) +
+     geom_bar(stat = "identity", position = "fill") +
+     geom_text(aes(label = count, size = 3, hjust = 0.5, vjust = 3))
+
+
+
+#wnba_shots_data %>%
+#     filter(coordinate_x >= 0,
+#            coordinate_y >= 0) %>%
+#     mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
+
+```
+
+## 
+
+```{r}
+wnba_shots_data_location <- wnba_shots_data %>%
+  filter(coordinate_x >= 0,
+         coordinate_y >= 0)
+wnba_shots_data
+
+
+#All shots (made and not made) -----------------------------------------------
+
+wnba_shots_data_location %>%
+  ggplot(aes(x = coordinate_x, y = coordinate_y)) +
+  geom_hex(binwidth = c(2,2)) + 
+  scale_fill_gradient(low = "darkblue", high = "darkorange") +
+  theme_minimal() +
+          ylim(min = -1, max = 70) +
+     facet_wrap(~scoring_play) +
+  theme(legend.position = "bottom") + 
+  labs(x = "X Coordinate (ft)", y = "Y Coordinate (ft)") + 
+  coord_equal()
+
+
+
+#Only shots made -------------------------------------------------------------
+
+
+#Display side by side
+allShots + madeShots + 
+  plot_annotation(title = 'Shots are made from under the basket the most')
+```
+
+## Score Differences
+
+```{r}
+wnba_shots_data <- wnba_shots_data %>%
+  mutate(home_away = case_when(team_id == home_team_id ~ "Home",
+                               team_id == away_team_id ~ "Away")) %>%
+  mutate(scorediff = case_when(home_away == "Home" ~ home_score - away_score,
+                               home_away == "Away" ~ away_score - home_score))
+
+```
+
