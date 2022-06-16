@@ -14,6 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(wehoop)
+library(flexclust)
+library(ggrepel)
 ```
 
 ## Purpose: Exploring WNBA Data
@@ -83,7 +85,7 @@ wnba_shots_data %>%
      geom_point(aes(x = total_seconds, y = team_score, color = home_away), 
                 alpha = .1) +#+
      geom_smooth(aes(x = total_seconds, y = team_score, color = home_away), 
-                 se = FALSE, alpha = .7) +
+                 se = FALSE, alpha = .7, method = "lm") +
     ggthemes::scale_color_tableau() +
      facet_wrap(~scoring_team) +
      theme_minimal() +
@@ -123,14 +125,14 @@ wnba_shots_data %>%
 
 
 
-#wnba_shots_data %>%
-#     filter(coordinate_x >= 0,
-#            coordinate_y >= 0) %>%
-#     mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
+wnba_shots_data %>%
+     filter(coordinate_x >= 0,
+            coordinate_y >= 0) %>%
+     mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
 
 ```
 
-## 
+## Shot locations
 
 ```{r}
 wnba_shots_data_location <- wnba_shots_data %>%
@@ -152,14 +154,6 @@ wnba_shots_data_location %>%
   labs(x = "X Coordinate (ft)", y = "Y Coordinate (ft)") + 
   coord_equal()
 
-
-
-#Only shots made -------------------------------------------------------------
-
-
-#Display side by side
-allShots + madeShots + 
-  plot_annotation(title = 'Shots are made from under the basket the most')
 ```
 
 ## Score Differences
@@ -173,3 +167,35 @@ wnba_shots_data <- wnba_shots_data %>%
 
 ```
 
+## Shot type clusters
+
+```{r}
+# Pts per shot vs shot distance for different shot types -------------------------------------------
+
+avg_pts_distance <- wnba_shots_data %>%
+  filter(coordinate_x >= 0,
+            coordinate_y >= 0) %>%
+  mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2)) %>%
+  group_by(type_text) %>%
+  summarize(n = n(), 
+            avgpts = mean(score_value), 
+            avgdist = mean(shot_distance)) %>%
+  filter(n >= 50) %>%
+  mutate(std_avgdist = as.numeric(scale(avgdist)),
+         std_avgpts = as.numeric(scale(avgpts))) %>%
+  arrange(desc(avgpts)) 
+  
+
+kmeanspp <-
+  kcca(dplyr::select(avg_pts_distance,
+                     std_avgdist, std_avgpts),
+       k = 3, control = list(initcent = "kmeanspp"))
+
+avg_pts_distance %>%
+  mutate(shot_clusters = as.factor(kmeanspp@cluster)) %>%
+  ggplot(aes(x = avgdist, y = avgpts, color = shot_clusters)) +
+  geom_point() +
+  geom_text_repel(label = avg_pts_distance$type_text, size = 3.5) +
+  theme_minimal()
+```
+bghkhdjgrsugdxvvvgghv vhvvkckh
