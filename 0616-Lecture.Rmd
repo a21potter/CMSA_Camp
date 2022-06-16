@@ -1,0 +1,353 @@
+---
+title: "0616-Lecture: Clustering Continued"
+subtitle: "Continuation of 06.15 class"
+author: "Amber Potter"
+date: "6/16/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prep NBA player dataset
+
+Created dataset of NBA player statistics per 100 possessions using [`ballr`](https://cran.r-project.org/web/packages/ballr/vignettes/use-ballr.html)
+
+```{r load-data, warning = FALSE, message = FALSE}
+library(tidyverse)
+nba_pos_stats <- 
+  read_csv("http://www.stat.cmu.edu/cmsac/sure/2022/materials/data/sports/clustering/nba_2022_player_per_pos_stats.csv")
+# Find rows for players indicating a full season worth of stats
+tot_players <- nba_pos_stats %>% 
+     filter(tm == "TOT")
+# Stack this dataset with players that played on just one team
+nba_player_stats <- nba_pos_stats %>% 
+     filter(!(player %in% tot_players$player)) %>% 
+     bind_rows(tot_players)
+
+
+# viewing minutes played
+nba_player_stats %>%
+     ggplot(aes(x = mp)) + 
+     stat_ecdf() +
+     geom_vline(xintercept = 125) +
+     theme_minimal()
+
+
+# Filter to only players with at least 125 minutes played
+nba_filtered_stats <- nba_player_stats %>% 
+     filter(mp >= 125)
+
+head(nba_filtered_stats)
+```
+
+
+```{r nba-complete}
+nba_filtered_stats <- nba_filtered_stats %>%
+  mutate(std_x3pa = as.numeric(scale(x3pa)),
+         std_trb = as.numeric(scale(trb)))
+player_dist <- dist(dplyr::select(nba_filtered_stats, #<<
+                                  std_x3pa, std_trb))
+nba_complete_hclust <- hclust(player_dist, method = "complete") #<<
+```
+## What are we cutting? Dendrograms
+
+Use the [`ggdendro`](https://cran.r-project.org/web/packages/ggdendro/index.html) package (instead of `plot()`)
+
+This is ugly:
+
+```{r}
+plot(nba_complete_hclust)
+```
+
+This is better (just remove theme elements):
+
+```{r complete-dendro}
+library(ggdendro)
+ggdendrogram(nba_complete_hclust, theme_dendro = FALSE, #<<
+             labels = FALSE, leaf_labels = FALSE) + #<< 
+  labs(y = "Dissimilarity between clusters") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank())
+```
+
+- Each __leaf__ is one observation
+
+- __Height of branch indicates dissimilarity between clusters__
+
+  - (After first step) Horizontal position along x-axis means nothing
+  
+  ## [Textbook example](https://bradleyboehmke.github.io/HOML/hierarchical.html)
+
+```{r out.width='100%', echo = FALSE, fig.align='center'}
+knitr::include_graphics("https://bradleyboehmke.github.io/HOML/19-hierarchical_files/figure-html/comparing-dendrogram-to-distances-1.png")
+```
+
+---
+
+## Cut dendrograms to obtain cluster labels
+
+
+Specify the height to cut with `h` instead of `k`
+
+```{r complete-dendro-cut, echo = FALSE, out.width='80%'}
+ggdendrogram(nba_complete_hclust, theme_dendro = FALSE, #<<
+             labels = FALSE, leaf_labels = FALSE) + #<< 
+  labs(y = "Dissimilarity between clusters") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank()) +
+  geom_hline(yintercept = 6, linetype = "dashed",
+             color = "darkred")
+```
+
+
+```{r nba-h-cut}
+cutree(nba_complete_hclust, h = 6) #<<
+```
+
+```{r nba-complete-cut-plot, echo = FALSE, out.width='80%'}
+nba_filtered_stats %>%
+  mutate(player_clusters = 
+           as.factor(cutree(nba_complete_hclust, #<<
+                            h = 6))) %>% #<<
+  ggplot(aes(x = std_x3pa, y = std_trb,
+             color = player_clusters)) +
+  geom_point(alpha = 0.5) + 
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+
+---
+
+## Single linkage example
+
+Change the `method` argument to `single`
+
+```{r single-dendro-cut, echo = FALSE, out.width='80%'}
+nba_single_hclust <- 
+  hclust(player_dist, method = "single")
+ggdendrogram(nba_single_hclust, theme_dendro = FALSE, #<<
+             labels = FALSE, leaf_labels = FALSE) + #<< 
+  labs(y = "Dissimilarity between clusters") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank())
+```
+
+
+Results in a __chaining__ effect
+
+```{r nba-single-plot, echo = FALSE, out.width='80%'}
+nba_filtered_stats %>%
+  mutate(player_clusters = 
+           as.factor(cutree(nba_single_hclust, #<<
+                            k = 4))) %>% #<<
+  ggplot(aes(x = std_x3pa, y = std_trb,
+             color = player_clusters)) +
+  geom_point(alpha = 0.5) + 
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+
+---
+
+## Average linkage example
+
+Change the `method` argument to `average`
+
+```{r average-dendro-cut, echo = FALSE, out.width='80%'}
+nba_average_hclust <- 
+  hclust(player_dist, method = "average")
+ggdendrogram(nba_average_hclust, theme_dendro = FALSE, #<<
+             labels = FALSE, leaf_labels = FALSE) + #<< 
+  labs(y = "Dissimilarity between clusters") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank())
+```
+
+Closer to `complete` but varies in compactness
+
+```{r nba-average-plot, echo = FALSE, out.width='80%'}
+nba_filtered_stats %>%
+  mutate(player_clusters = 
+           as.factor(cutree(nba_average_hclust, #<<
+                            k = 4))) %>% #<<
+  ggplot(aes(x = std_x3pa, y = std_trb,
+             color = player_clusters)) +
+  geom_point(alpha = 0.5) + 
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+---
+
+## More linkage functions
+
+
+- __Centroid linkage__: Computes the dissimilarity between the centroid for cluster 1 and the centroid for cluster 2
+
+  - i.e. distance between the averages of the two clusters
+  
+  - use `method = centroid`
+  
+--
+
+- __Ward's linkage__: Merges a pair of clusters to minimize the within-cluster variance
+
+  - i.e. aim is to minimize the objection function from $K$-means
+  
+  - can use `ward.D` or `ward.D2` (different algorithms)
+  
+--
+
+```{r out.width='30%', echo = FALSE, fig.align='center'}
+knitr::include_graphics("https://media1.tenor.com/images/bfb8e3e881ac4413ae12b61c4b982d60/tenor.gif?itemid=5140031")
+```
+
+---
+
+## [Minimax linkage](http://statweb.stanford.edu/~tibs/sta306bfiles/minimax-clustering.pdf)
+
+- Each cluster is defined __by a prototype__ observation (most representative of the average centroid)
+
+- __Identify the point whose farthest point is closest__ (hence the minimax)
+
+```{r out.width='60%', echo = FALSE, fig.align='center'}
+knitr::include_graphics("https://europepmc.org/articles/PMC4527350/bin/nihms637357f2.jpg")
+```
+
+- Use this minimum-maximum distance as the measure of cluster dissimilarity
+
+- Dendogram interpretation: each point point is $\leq h$ in dissimilarity to the __prototype__ of cluster
+
+- __Cluster centers are chosen among the observations themselves - hence prototype__
+
+---
+
+## Minimax linkage example
+
+
+- Easily done in `R` via the [`protoclust`](https://github.com/jacobbien/protoclust) package
+
+- Use the `protoclust()` function to apply the clustering to the `dist()` object
+
+```{r nba-minimax}
+library(protoclust)
+nba_minimax <- protoclust(player_dist) #<<
+ggdendrogram(nba_minimax, 
+             theme_dendro = FALSE, 
+             labels = FALSE, 
+             leaf_labels = FALSE) + 
+  labs(y = "Maximum dissimilarity from prototype") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank())
+```
+
+## Minimax linkage example
+
+
+- Use the `protocut()` function to make the cut 
+
+- But then access the cluster labels `cl`
+
+```{r nba-minimax-cut}
+minimax_player_clusters <- 
+  protocut(nba_minimax, k = 3) #<< works in the same way as cutree, takes same arguments
+nba_filtered_stats %>%
+  mutate(player_clusters = 
+           as.factor(minimax_player_clusters$cl)) %>% #<<
+  ggplot(aes(x = std_x3pa, y = std_trb,
+             color = player_clusters)) +
+  geom_point(alpha = 0.5) + 
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+
+## Minimax linkage example
+
+- Want to check out the prototypes for the three clusters
+
+- `protocut` returns the indices of the prototypes (in order of the cluster labels)
+
+```{r prototypes-indices}
+minimax_player_clusters$protos
+```
+
+- View these player rows using `slice`:
+
+```{r proto-players}
+nba_prototypes <- nba_filtered_stats %>%
+  dplyr::select(player, pos, age, std_x3pa, std_trb) %>%
+  slice(minimax_player_clusters$protos)
+
+
+minimax_player_clusters <- 
+  protocut(nba_minimax, k = 3) #<< works in the same way as cutree, takes same arguments
+nba_filtered_stats %>%
+  mutate(player_clusters = 
+           as.factor(minimax_player_clusters$cl)) %>% #<<
+  ggplot(aes(x = std_x3pa, y = std_trb,
+             color = player_clusters)) +
+  geom_point(alpha = 0.5) + 
+  geom_point(data = mutate(nba_prototypes, 
+                           player_clusters = as.factor(c(1, 2, 3))),
+             size = 5) +
+  geom_label(data = mutate(nba_prototypes, 
+                           player_clusters = as.factor(c(1, 2, 3))),
+             aes(label = player)) +
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+```
+
+---
+
+## Wrapping up...
+
+- For context, how does player position (`pos`) relate to our clustering results?
+
+```{r minimax-comparison}
+table("Clusters" = minimax_player_clusters$cl, 
+      "Positions" = nba_filtered_stats$pos)
+```
+
+--
+
+- Can see positions tend to fall within particular clusters...
+
+- _What's the way to visually compare the two labels?_
+
+--
+
+- __We can easily include more variables__ - just changes our distance matrix
+
+--
+
+- But we might want to explore __soft__ assignments instead...
+
+
+
+***Can add any number of variables as you want. Keep in mind the more variables you add, the greater the distance between points. (Curse of dimensionality.)***
