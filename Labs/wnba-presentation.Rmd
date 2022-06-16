@@ -1,0 +1,67 @@
+---
+title: "WNBA EDA Presentation"
+author: "Amber Potter, Edvin Tran Hoac, Sierra Martinez aka the Slitle Tides"
+date: "6/16/2022"
+output:
+  xaringan::moon_reader:
+    css: xaringan-themer.css
+    lib_dir: libs
+    nature:
+      ratio: "16:9"
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+<style type="text/css">
+.remark-slide-content {
+    font-size: 25px;
+    padding: 1em 4em 1em 4em;
+}
+</style>
+
+```{r xaringan-themer, include=FALSE, warning=FALSE}
+library(xaringanthemer)
+style_mono_accent(base_color = "#fa4d00")
+```
+
+## Our Data
+
+```{r, echo = FALSE, out.width = '50%', fig.align='center'}
+knitr::include_graphics("https://upload.wikimedia.org/wikipedia/en/thumb/9/97/WNBA_logo.svg/1200px-WNBA_logo.svg.png") 
+```
+--
+
+
+.pull-left[
+- Women's National Basketball Association shot dataset
+
+- Accessed through the `wehoop` package
+]
+
+.pull-right[
+- Each observation represents a shot attempt from the 2022 WNBA Season through June $10^{th}$, $2022$
+
+- Contains $8854$ shots from $51$ games
+]
+
+---
+
+## Key Variables
+
+.pull-left[
+__We used information on the following variables:__
+
+- Coordinates and distance to basket
+
+- Time and quarter
+
+- Shot types
+
+- Success and failure
+]
+
+
+---
+
+
