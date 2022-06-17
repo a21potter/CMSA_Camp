@@ -69,7 +69,7 @@ write_csv(wnba_shots_data,
 
 ### Home Team Advantage
 
-Hypothesis: The home team has a scoring advantage.
+Does the home team have a scoring advantage?
 
   - Look at slopes of point totals throughout each game.
 
@@ -103,9 +103,10 @@ wnba_shots_data %>%
 ```
 
 
+
 ### Shot Accuracy
 
-Hypothesis: Layups are the most accurate shots.
+What are the most accurate shots?
 
   - Look at percentage of baskets and misses, also look at shot frequency
 
@@ -147,7 +148,7 @@ wnba_shots_data_simp %>%
 
 ### Shot locations
 
-Hypothesis: Most shots are taken from under the basket or beyond the three point line
+Where are most shots taken from?
 
 ```{r}
 wnba_shots_data_location <- wnba_shots_data %>%
