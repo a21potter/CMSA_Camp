@@ -22,6 +22,18 @@ output:
 
 ```{r xaringan-themer, include=FALSE, warning=FALSE}
 library(xaringanthemer)
+library(tidyverse)
+library(wehoop)
+library(flexclust)
+library(ggrepel)
+library(kableExtra)
+
+style_mono_accent(base_color = "#fa4d00")
+```
+
+```{r read-data, include=FALSE, warning=FALSE}
+wnba_shots_data <- read_csv("data/wnba_shots_2022.csv")
+
 style_mono_accent(base_color = "#fa4d00")
 ```
 
@@ -40,7 +52,7 @@ knitr::include_graphics("https://upload.wikimedia.org/wikipedia/en/thumb/9/97/WN
 ]
 
 .pull-right[
-- Each observation represents a shot attempt from the 2022 WNBA Season through June $10^{th}$, $2022$
+- Each observation represents a shot attempt from the $2022$ WNBA Season through June $10$, $2022$
 
 - Contains $8854$ shots from $51$ games
 ]
@@ -51,17 +63,103 @@ knitr::include_graphics("https://upload.wikimedia.org/wikipedia/en/thumb/9/97/WN
 
 .pull-left[
 __We used information on the following variables:__
-
-- Coordinates and distance to basket
-
-- Time and quarter
-
-- Shot types
-
-- Success and failure
 ]
 
+```{r key-data, include=FALSE, warning=FALSE}
+wnba_shots_data <- wnba_shots_data %>%
+     mutate(total_seconds = ((((period_number - 1) * 10) * 60) + 
+                               ((10 - as.numeric(clock_minutes)) * 60) + 
+                               (60 - as.numeric(clock_seconds)))/60,
+            away_team = paste0(away_team_name, " ", away_team_mascot),
+            home_team = paste0(home_team_name, " ", home_team_mascot),
+            shooting_team = case_when(team_id == home_team_id ~ home_team,
+                                     team_id == away_team_id ~ away_team),
+            home_away = case_when(team_id == home_team_id ~ "Home",
+                                     team_id == away_team_id ~ "Away"),
+            team_score = case_when(team_id == home_team_id ~ home_score,
+                                     team_id == away_team_id ~ away_score))
+
+wnba_shots_data %>%
+  select(shooting_team, home_away, period_number, clock_minutes, clock_seconds, 
+         coordinate_x, coordinate_y, type_text, score_value, home_score, away_score) %>%
+  head(5) %>%
+  knitr::kable(col.names = c("Shooting Team", "Home or Away", "Period", "Clock Minutes", "Clock Seconds", "X-Position", "Y-Position", "Shot Type", "Shot Value", "Home Score", "Away Score")) %>%
+  kable_styling(bootstrap_options = "striped", full_width = TRUE, position = "center", font_size = 16)
+  
+```
+
+
+
+```{r ref.label='key-data', echo = FALSE}
+
+```
 
 ---
 
+
+### Are layups the most accurate shot?
+
+
+```{r shot-type-mutate, include=FALSE, warning=FALSE, message=FALSE}
+wnba_shots_data_simp <- wnba_shots_data %>%
+     mutate(shot_type = case_when(grepl("Layup", type_text, fixed = TRUE) ~ "Layup",
+                                  grepl("Jump Shot", type_text, fixed = TRUE) ~ "Jump Shot",
+                                  grepl("Free Throw", type_text, fixed = TRUE) ~ "Free Throw",
+                                  grepl("Tip Shot", type_text, fixed = TRUE) ~ "Tip Shot",
+                                  grepl("Hook", type_text, fixed = TRUE) ~ "Hook Shot",
+                                  grepl("Dunk", type_text, fixed = TRUE) ~ "Dunk"))
+```
+
+```{r shot-type-viz, include=FALSE, warning=FALSE, message=FALSE}
+wnba_shots_data_simp %>%
+     group_by(shot_type) %>%
+     filter(n() > 100) %>%
+     summarize(shot_type,
+               prop = mean(scoring_play), 
+               scoring_play) %>%
+     ggplot(aes(x = reorder(shot_type, -prop), y = prop, fill = scoring_play)) +
+     geom_bar(stat = "identity", position = "fill") +
+     labs(x = "Shot Type",
+          y = "Proportion",
+          fill = "Did they score?") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+
+```{r shot-type-table, include=FALSE, warning=FALSE, message=FALSE}
+wnba_shots_data_simp %>%
+     group_by(shot_type, scoring_play) %>%
+     summarize(count = n()) %>%
+     pivot_wider(names_from = scoring_play, 
+                 names_prefix = "scored_",
+                 values_from = count,
+                 values_fill = 0) %>%
+    mutate(total_freq = scored_TRUE + scored_FALSE) %>%
+    knitr::kable(col.names = c("Shot Type", "Frequency Scored", "Frequency Missed", "Total Fequency")) %>%
+    kable_styling(bootstrap_options = "striped", full_width = TRUE, position = "center", font_size = 16)
+```
+
+
+.pull-right[
+
+```{r ref.label='shot-type-table', echo = FALSE}
+
+```
+]
+
+.pull-left[
+
+```{r ref.label='shot-type-viz', echo = FALSE}
+
+```
+]
+---
+
+```{r}
+wnba_shots_data %>%
+     filter(coordinate_x >= 0,
+            coordinate_y >= 0) %>%
+     mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
+```
 

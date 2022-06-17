@@ -38,6 +38,8 @@ write_csv(wnba_shots_data,
           "data/wnba_shots_2022.csv")
 ```
 
+### Initial Ideas
+
 - home vs away - bar graph position = "fill"
 
 - points over time - facet by team, plot home and away average scores over time
@@ -53,39 +55,44 @@ write_csv(wnba_shots_data,
 
 -----------
 
-## Ideas
+### Ideas
 
-- shots first half vs second half - bar graph, position = "fill"
+- shot type frequency or accuracy percentage - bar graph (position = "fill")
 
-- points over time - facet by team, plot home and away average scores over time - line graph
+- points over time - facet by team, plot home and away average scores over time - line graph (smooth or linear???)
 
 - x and y coordin.- scatter/hex/heatmap
 
 
-## First:
+## EDA Hypotheses
 
-### Does the home team have an advantage?
+### Home Team Advantage
+
+Hypothesis: The home team has a scoring advantage.
+
+  - Look at slopes of point totals throughout each game.
 
 ```{r}
 wnba_shots_data <- wnba_shots_data %>%
-     mutate(total_seconds = ((((period_number - 1) * 10) * 60) + ((10 - as.numeric(clock_minutes)) * 60) + (60 - as.numeric(clock_seconds)))/60,
+     mutate(total_seconds = ((((period_number - 1) * 10) * 60) + 
+                               ((10 - as.numeric(clock_minutes)) * 60) + 
+                               (60 - as.numeric(clock_seconds)))/60,
             away_team = paste0(away_team_name, " ", away_team_mascot),
-            home_team = paste0(home_team_name, " ", home_team_mascot)) %>%
-     mutate(scoring_team = case_when(team_id == home_team_id ~ home_team,
-                                     team_id == away_team_id ~ away_team)) %>%
-     mutate(home_away = case_when(team_id == home_team_id ~ "Home",
-                                     team_id == away_team_id ~ "Away")) %>%
-     mutate(team_score = case_when(team_id == home_team_id ~ home_score,
+            home_team = paste0(home_team_name, " ", home_team_mascot),
+            shooting_team = case_when(team_id == home_team_id ~ home_team,
+                                     team_id == away_team_id ~ away_team),
+            home_away = case_when(team_id == home_team_id ~ "Home",
+                                     team_id == away_team_id ~ "Away"),
+            team_score = case_when(team_id == home_team_id ~ home_score,
                                      team_id == away_team_id ~ away_score))
+
 
 wnba_shots_data %>%
      filter(scoring_play) %>%
-     ggplot() +
-     geom_point(aes(x = total_seconds, y = team_score, color = home_away), 
-                alpha = .1) +#+
-     geom_smooth(aes(x = total_seconds, y = team_score, color = home_away), 
-                 se = FALSE, alpha = .7, method = "lm") +
-    ggthemes::scale_color_tableau() +
+     ggplot(aes(x = total_seconds, y = team_score, color = home_away)) +
+     geom_point(alpha = .1) +#+
+     geom_smooth(se = FALSE, alpha = .7, method = "lm") +
+     ggthemes::scale_color_tableau() +
      facet_wrap(~scoring_team) +
      theme_minimal() +
      labs(x = "Minutes",
@@ -94,12 +101,14 @@ wnba_shots_data %>%
           title = "Being the home team is not as much of an advantage as one might think")
 ```
 
-## Second
 
-### Are layups the most accurate shot?
+### Shot Accuracy
+
+Hypothesis: Layups are the most accurate shots.
+
+  - Look at percentage of baskets and misses, also look at shot frequency
 
 ```{r}
-#n(wnba_shots_data$shot_type)
 wnba_shots_data <- wnba_shots_data %>%
      mutate(shot_type = case_when(grepl("Layup", type_text, fixed = TRUE) ~ "Layup",
                                   grepl("Jump Shot", type_text, fixed = TRUE) ~ "Jump Shot",
@@ -108,28 +117,40 @@ wnba_shots_data <- wnba_shots_data %>%
                                   grepl("Hook", type_text, fixed = TRUE) ~ "Hook Shot",
                                   grepl("Dunk", type_text, fixed = TRUE) ~ "Dunk"))
 
-wnba_shots_data %>%
+wnba_shots_data_simp %>%
      group_by(shot_type) %>%
+     filter(n() > 100) %>%
      summarize(shot_type,
-               count = mean(scoring_play), 
+               prop = mean(scoring_play), 
                scoring_play) %>%
-     ggplot(aes(x = shot_type, y = count, fill = scoring_play)) +
+     ggplot(aes(x = reorder(shot_type, -prop), y = prop, fill = scoring_play)) +
      geom_bar(stat = "identity", position = "fill") +
-     geom_text(aes(label = count, size = 3, hjust = 0.5, vjust = 3))
+     labs(x = "Shot Type",
+          y = "Proportion",
+          fill = "Did they score?") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 
-wnba_shots_data %>%
-     filter(coordinate_x >= 0,
-            coordinate_y >= 0) %>%
-     mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
+wnba_shots_data_simp %>%
+     group_by(shot_type, scoring_play) %>%
+     summarize(count = n()) %>%
+     pivot_wider(names_from = scoring_play, 
+                 names_prefix = "scored_",
+                 values_from = count,
+                 values_fill = 0) %>%
+    mutate(total_freq = scored_TRUE + scored_FALSE) %>%
+    knitr::kable(col.names = c("Shot Type", "Frequency Scored", "Frequency Missed", "Total Fequency")) %>%
+    kable_styling(bootstrap_options = "striped", full_width = TRUE, position = "center", font_size = 16)
 ```
 
-## Shot locations
+### Shot locations
+
+Hypothesis: Most shots are taken from under the basket or beyond the three point line
 
 ```{r}
 wnba_shots_data_location <- wnba_shots_data %>%
-  filter(coordinate_x >= 0,
-         coordinate_y >= 0)
-wnba_shots_data
+     filter(coordinate_x >= 0,
+            coordinate_y >= 0)
 
 
 #All shots (made and not made) -----------------------------------------------
@@ -145,25 +166,27 @@ wnba_shots_data_location %>%
   coord_equal()
 ```
 
-## Score Differences
+### Score Differences
 
 ```{r}
 wnba_shots_data <- wnba_shots_data %>%
-  mutate(home_away = case_when(team_id == home_team_id ~ "Home",
-                               team_id == away_team_id ~ "Away")) %>%
   mutate(scorediff = case_when(home_away == "Home" ~ home_score - away_score,
-                               home_away == "Away" ~ away_score - home_score))
+                               home_away == "Away" ~ away_score - home_score),
+         shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
 
 ```
 
-## Shot type clusters
+
+
+## Clustering
+
+### Clusters of different shot types based on average distance and average points
 
 ```{r}
 # Pts per shot vs shot distance for different shot types -------------------------------------------
 avg_pts_distance <- wnba_shots_data %>%
   filter(coordinate_x >= 0,
             coordinate_y >= 0) %>%
-  mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2)) %>%
   group_by(type_text) %>%
   summarize(n = n(), 
             avgpts = mean(score_value), 
