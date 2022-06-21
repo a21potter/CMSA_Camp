@@ -162,8 +162,8 @@ wnba_shots_data_location %>%
   geom_hex(binwidth = c(2,2)) + 
   scale_fill_gradient(low = "darkblue", high = "darkorange") +
   theme_minimal() +
-          ylim(min = -1, max = 70) +
-     facet_wrap(~scoring_play) +
+  ylim(min = -1, max = 70) +
+  facet_wrap(~scoring_play) +
   theme(legend.position = "bottom") + 
   labs(x = "X Coordinate (ft)", y = "Y Coordinate (ft)",
        fill = "Frequency") + 
