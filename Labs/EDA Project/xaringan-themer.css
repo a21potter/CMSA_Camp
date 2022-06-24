@@ -38,28 +38,27 @@
   --text-font-size: 1rem;
   --code-font-size: 0.9rem;
   --code-inline-font-size: 1em;
-  --header-h1-font-size: 2.75rem;
+  --header-h1-font-size: 3.75rem;
   --header-h2-font-size: 2.25rem;
   --header-h3-font-size: 1.75rem;
 
   /* Colors */
-  --text-color: #272822;
+  --text-color: #546874;
   --header-color: #fa4d00;
   --background-color: #FFFFFF;
-  --link-color: #fa4d00;
-  --text-bold-color: #fa4d00;
+  --link-color: #546874;
+  --text-bold-color: #546874;
   --code-highlight-color: rgba(255,255,0,0.5);
   --inverse-text-color: #FFFFFF;
-  --inverse-background-color: #fa4d00;
+  --inverse-background-color: #546874;
   --inverse-header-color: #FFFFFF;
-  --inverse-link-color: #fa4d00;
-  --title-slide-background-color: #fa4d00;
+  --inverse-link-color: #546874;
+  --title-slide-background-color: #546874;
   --title-slide-text-color: #FFFFFF;
   --header-background-color: #fa4d00;
   --header-background-text-color: #FFFFFF;
-  --base: #fa4d00;
-  --white: #FFFFFF;
-  --black: #272822;
+  --primary: #546874;
+  --secondary: #fa4d00;
 }
 
 html {
@@ -191,7 +190,7 @@ th, td {
   padding: 5px;
 }
 .remark-slide thead, .remark-slide tfoot, .remark-slide tr:nth-child(even) {
-  background: #FEDBCC;
+  background: #DCE0E3;
 }
 table.dataTable tbody {
   background-color: var(--background-color);
@@ -201,7 +200,7 @@ table.dataTable.display tbody tr.odd {
   background-color: var(--background-color);
 }
 table.dataTable.display tbody tr.even {
-  background-color: #FEDBCC;
+  background-color: #DCE0E3;
 }
 table.dataTable.hover tbody tr:hover, table.dataTable.display tbody tr:hover {
   background-color: rgba(255, 255, 255, 0.5);
@@ -271,22 +270,16 @@ table.dataTable.hover tbody tr:hover, table.dataTable.display tbody tr:hover {
   }
 }
 
-.base {
-  color: var(--base);
+.primary {
+  color: var(--primary);
 }
-.bg-base {
-  background-color: var(--base);
+.bg-primary {
+  background-color: var(--primary);
 }
-.white {
-  color: var(--white);
+.secondary {
+  color: var(--secondary);
 }
-.bg-white {
-  background-color: var(--white);
-}
-.black {
-  color: var(--black);
-}
-.bg-black {
-  background-color: var(--black);
+.bg-secondary {
+  background-color: var(--secondary);
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "WNBA EDA Presentation"
-author: "Amber Potter, Edvin Tran Hoac, Sierra Martinez aka the Slitle Tides"
-date: "6/16/2022"
+author: "Amber Potter, Edvin Tran Hoac, Sierra Martinez"
+date: '`r Sys.Date()`'
 output:
   xaringan::moon_reader:
     css: xaringan-themer.css
@@ -13,11 +13,24 @@ output:
       countIncrementalSlides: false
 ---
 
+
 <style type="text/css">
 .remark-slide-content {
     font-size: 25px;
+    line-height: 1.1;
     padding: 1em 4em 1em 4em;
+}    
+hr, .title-slide h1::after, .mline h1::after {
+  content: '';
+  display: block;
+  border: none;
+  background-color: #fa4d00;
+  color: #546874;
+  height: 2px;
+  margin: .5em 15px 0 15px;
 }
+
+
 </style>
 
 ```{r xaringan-themer, include=FALSE, warning=FALSE}
@@ -27,18 +40,67 @@ library(wehoop)
 library(flexclust)
 library(ggrepel)
 library(kableExtra)
+library(ggdendro)
 
-style_mono_accent(base_color = "#fa4d00")
+
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(
+  #fig.width = 9, fig.height=3.5, fig.retina = 3,
+  #out.width = "100%",
+  cache = FALSE,
+  echo = TRUE,
+  message = FALSE, 
+  warning = FALSE,
+  fig.show = TRUE,
+  hiline = TRUE
+)
 ```
+
 
 ```{r read-data, include=FALSE, warning=FALSE}
 wnba_shots_data <- read_csv("data/wnba_shots_2022.csv")
 
-style_mono_accent(base_color = "#fa4d00")
+#style_mono_accent(base_color = "#fa4d00")
+style_duo(
+    primary_color = "#546874",
+    secondary_color = "#fa4d00",
+    text_color = "#546874",
+  header_color = "#fa4d00",
+  background_color = "#FFFFFF",
+  link_color = choose_dark_or_light("#546874", "#fa4d00", "#546874"),
+  text_bold_color = choose_dark_or_light("#546874", "#fa4d00",
+    "#546874"),
+  text_slide_number_color = "#fa4d00",
+  code_highlight_color = "rgba(255,255,0,0.5)",
+  code_inline_color = "#fa4d00",
+  code_inline_font_size = "1em",
+  inverse_background_color = "#546874",
+  inverse_text_color = "#FFFFFF",
+  inverse_header_color = "#FFFFFF",
+  inverse_link_color = choose_dark_or_light("#546874", "#fa4d00", "#546874"),
+  title_slide_text_color = "#FFFFFF",
+  title_slide_background_color ="#546874",
+  table_border_color = "#666",
+  table_row_border_color = "#ddd",
+  table_row_even_background_color = lighten_color("#546874", 0.8),
+  base_font_size = "20px",
+  text_font_size = "1rem",
+  header_h1_font_size = "3.75rem",
+  header_h2_font_size = "2.25rem",
+  header_h3_font_size = "1.75rem",
+  header_background_auto = FALSE,
+  header_background_color = "#fa4d00",
+  header_background_text_color = "#FFFFFF",
+  header_background_padding = NULL,
+  header_background_content_padding_top = "7rem",
+  header_background_ignore_classes = c("normal", "inverse", "title", "middle",
+    "bottom")
+)
+
 ```
 
 ## Our Data
-
+--
 ```{r, echo = FALSE, out.width = '50%', fig.align='center'}
 knitr::include_graphics("https://upload.wikimedia.org/wikipedia/en/thumb/9/97/WNBA_logo.svg/1200px-WNBA_logo.svg.png") 
 ```
@@ -52,9 +114,9 @@ knitr::include_graphics("https://upload.wikimedia.org/wikipedia/en/thumb/9/97/WN
 ]
 
 .pull-right[
-- Each observation represents a shot attempt from the $2022$ WNBA Season through June $10$, $2022$
+- Each observation represents a shot attempt from the 2022 WNBA Season through June 10, 2022
 
-- Contains $8854$ shots from $51$ games
+- Contains 8854 shots from 51 games
 ]
 
 ---
@@ -66,6 +128,7 @@ __We used information on the following variables:__
 ]
 
 ```{r key-data, include=FALSE, warning=FALSE}
+library(patchwork)
 wnba_shots_data <- wnba_shots_data %>%
      mutate(total_seconds = ((((period_number - 1) * 10) * 60) + 
                                ((10 - as.numeric(clock_minutes)) * 60) + 
@@ -77,7 +140,9 @@ wnba_shots_data <- wnba_shots_data %>%
             home_away = case_when(team_id == home_team_id ~ "Home",
                                      team_id == away_team_id ~ "Away"),
             team_score = case_when(team_id == home_team_id ~ home_score,
-                                     team_id == away_team_id ~ away_score))
+                                     team_id == away_team_id ~ away_score),
+            shot_outcome = case_when(scoring_play == TRUE ~ "Scored",
+                                     scoring_play == FALSE ~ "Missed"))
 
 wnba_shots_data %>%
   select(shooting_team, home_away, period_number, clock_minutes, clock_seconds, 
@@ -85,6 +150,8 @@ wnba_shots_data %>%
   head(5) %>%
   knitr::kable(col.names = c("Shooting Team", "Home or Away", "Period", "Clock Minutes", "Clock Seconds", "X-Position", "Y-Position", "Shot Type", "Shot Value", "Home Score", "Away Score")) %>%
   kable_styling(bootstrap_options = "striped", full_width = TRUE, position = "center", font_size = 16)
+
+
   
 ```
 
@@ -96,10 +163,50 @@ wnba_shots_data %>%
 
 ---
 
+class:inverse center middle
 
-### Are layups the most accurate shot?
+## Where are most shots taken?
+
+---
+
+### Most shots are taken from under the basket
+--
+.center[
+```{r shot-hex-plot, echo=FALSE, fig.width = 20, fig.height=9.5}
+wnba_shots_data_location <- wnba_shots_data %>%
+     filter(coordinate_x >= 0,
+            coordinate_y >= 0)
 
 
+#All shots (made and not made) 
+wnba_shots_data_location %>%
+  ggplot(aes(x = coordinate_x, y = coordinate_y)) +
+  geom_hex(binwidth = c(2,2)) + 
+  scale_fill_gradient(low = "#546874", high = "#fa4d00") +
+  theme_minimal() +
+  ylim(min = -1, max = 70) +
+  facet_wrap(~shot_outcome)+
+  theme(text = element_text(size = 30),
+        plot.title = element_blank(),
+        legend.key.height = unit(2, 'cm'), #change legend key height
+        legend.key.width = unit(1, 'cm'), #change legend key width
+        legend.title = element_text(size=20), #change legend title font size
+        legend.text = element_text(size=15)) + 
+  labs(x = "X Coordinate (ft)", y = "Y Coordinate (ft)",
+       fill = "Frequency") + 
+  coord_equal()
+
+```
+
+]
+
+---
+class: inverse middle center
+## What are the most accurate shots?
+---
+
+### Layups are the most accurate... If you don't count free throws
+--
 ```{r shot-type-mutate, include=FALSE, warning=FALSE, message=FALSE}
 wnba_shots_data_simp <- wnba_shots_data %>%
      mutate(shot_type = case_when(grepl("Layup", type_text, fixed = TRUE) ~ "Layup",
@@ -116,21 +223,26 @@ wnba_shots_data_simp %>%
      filter(n() > 100) %>%
      summarize(shot_type,
                prop = mean(scoring_play), 
-               scoring_play) %>%
+               scoring_play,
+               .groups = "drop") %>%
      ggplot(aes(x = reorder(shot_type, -prop), y = prop, fill = scoring_play)) +
      geom_bar(stat = "identity", position = "fill") +
      labs(x = "Shot Type",
-          y = "Proportion",
+          y = "Percentage",
           fill = "Did they score?") +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  scale_fill_manual(values = c("#546874", "#fa4d00")) +
+  theme(legend.position = "bottom",
+        plot.title = element_blank(),
+        text = element_text(size = 15))
 ```
 
 
 ```{r shot-type-table, include=FALSE, warning=FALSE, message=FALSE}
 wnba_shots_data_simp %>%
      group_by(shot_type, scoring_play) %>%
-     summarize(count = n()) %>%
+     summarize(count = n(),
+               .groups = "drop") %>%
      pivot_wider(names_from = scoring_play, 
                  names_prefix = "scored_",
                  values_from = count,
@@ -138,28 +250,145 @@ wnba_shots_data_simp %>%
     mutate(total_freq = scored_TRUE + scored_FALSE) %>%
     knitr::kable(col.names = c("Shot Type", "Frequency Scored", "Frequency Missed", "Total Fequency")) %>%
     kable_styling(bootstrap_options = "striped", full_width = TRUE, position = "center", font_size = 16)
-```
-
-
-.pull-right[
-
-```{r ref.label='shot-type-table', echo = FALSE}
 
 ```
-]
 
-.pull-left[
 
-```{r ref.label='shot-type-viz', echo = FALSE}
+.pull-left[.top[
+
+</br>
+```{r ref.label='shot-type-table', echo = FALSE, out.height="100%"}
 
 ```
-]
+
+]]
+
+.pull-right[.top[
+
+```{r ref.label='shot-type-viz', echo = FALSE, out.height="80%"}
+
+```
+<br>
+]]
+---
+class:inverse center middle
+
+## But how would these shot types be clustered based on shot distance and point value?
+
 ---
 
-```{r}
-wnba_shots_data %>%
-     filter(coordinate_x >= 0,
+### Turns out, similarly named shots aren't always clustered together
+
+--
+
+```{r clustering-viz, include=FALSE, warning=FALSE, message=FALSE}
+# Pts per shot vs shot distance for different shot types 
+avg_pts_distance <- wnba_shots_data %>%
+  mutate(scorediff = case_when(home_away == "Home" ~ home_score - away_score,
+                               home_away == "Away" ~ away_score - home_score),
+         shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2)) %>%
+  filter(coordinate_x >= 0,
             coordinate_y >= 0) %>%
-     mutate(shot_distance = sqrt((coordinate_x - 25)^2 + (coordinate_y)^2))
+  group_by(type_text) %>%
+  summarize(n = n(), 
+            avgpts = mean(score_value), 
+            avgdist = mean(shot_distance)) %>%
+  filter(n >= 50) %>%
+  mutate(std_avgdist = as.numeric(scale(avgdist)),
+         std_avgpts = as.numeric(scale(avgpts))) %>%
+  arrange(desc(avgpts)) 
+
+type_dist <- dist(dplyr::select(avg_pts_distance, std_avgdist, std_avgpts))
+
+# Centroid linkage
+type_hclust <- hclust(type_dist, method = "centroid")
+
+avg_pts_distance %>%
+  mutate(type_clusters = as.factor(cutree(type_hclust, k = 3))) %>%
+  ggplot(aes(x = avgdist, y = avgpts, color = type_clusters)) +
+  geom_point() +
+  geom_text_repel(label = avg_pts_distance$type_text, size = 3.5) +
+  labs(x = "Average Distance from Basket (ft)", y = "Average Points Return") +
+  theme_minimal() +
+  scale_color_manual(values = c("#000000", lighten_color("#546874", .2), "#fa4d00")) +
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        text = element_text(size = 15))
+  #ggthemes::scale_color_colorblind()
 ```
+
+
+
+```{r ref.label='clustering-viz', echo = FALSE, out.width = "100%", fig.width = 9, fig.height=3.5, fig.retina = 3}
+
+```
+
+---
+class: inverse center middle
+## Is the home team advantage real?
+
+---
+### Scores provide no observable evidence of home team advantage
+--
+.center[
+```{r advantage-viz, echo = FALSE, fig.width = 20, fig.height = 9}
+wnba_shots_data %>%
+     filter(scoring_play) %>%
+     ggplot(aes(x = total_seconds, y = team_score, color = home_away)) +
+     geom_point(alpha = .1) +#+
+     geom_smooth(se = FALSE, alpha = .7, method = "lm") +
+     scale_color_manual(values = c("#546874", "#fa4d00")) +
+     facet_wrap(~shooting_team, nrow = 2) +
+     theme_minimal() +
+     labs(x = "Minutes",
+          y = "Team Points",
+          color = "Home or Away") +
+  theme(text = element_text(size = 25),
+        legend.position = "bottom")
+```
+]
+
+---
+
+## Conclusions
+
+- Most shots are taken under the basket; these shots tend to be more successful
+
+- Layups are the most accurate type of shot, disregarding free throws
+
+- Mid-range shot types yield the fewest points on average
+--
+
+### Limitations
+
+- Small sample size: 51 games which is less than half of a regular season
+
+- Purely regular season data, no playoff data
+--
+
+### Future work
+
+- Look at previous seasons, more recent games, player-specific data
+
+
+---
+class: inverse center middle
+## Appendix
+
+---
+### Dendrogram
+.center[
+```{r dendro, echo = FALSE, out.height = "100%"}
+ggdendrogram(type_hclust, labels = F, leaf_labels = F,
+             theme_dendro = F) + 
+  labs(y = "Dissimilarity between clusters") + 
+  theme_bw() + 
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid = element_blank(),
+        text = element_text(size = 15)) +
+  geom_hline(yintercept = 1.32, linetype = "dashed", color = "darkred")
+```
+]
 
