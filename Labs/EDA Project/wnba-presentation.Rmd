@@ -239,7 +239,7 @@ wnba_shots_data_simp %>%
 
 
 ```{r shot-type-table, include=FALSE, warning=FALSE, message=FALSE}
-wnba_shots_data_simp %>%
+shot_table <- wnba_shots_data_simp %>%
      group_by(shot_type, scoring_play) %>%
      summarize(count = n(),
                .groups = "drop") %>%
@@ -247,7 +247,9 @@ wnba_shots_data_simp %>%
                  names_prefix = "scored_",
                  values_from = count,
                  values_fill = 0) %>%
-    mutate(total_freq = scored_TRUE + scored_FALSE) %>%
+    mutate(total_freq = scored_TRUE + scored_FALSE)
+
+shot_table[c(2,5,3, 4, 1, 6),] %>%
     knitr::kable(col.names = c("Shot Type", "Frequency Scored", "Frequency Missed", "Total Fequency")) %>%
     kable_styling(bootstrap_options = "striped", full_width = TRUE, position = "center", font_size = 16)
 
@@ -280,7 +282,7 @@ class:inverse center middle
 ### Turns out, similarly named shots aren't always clustered together
 
 --
-
+<br>
 ```{r clustering-viz, include=FALSE, warning=FALSE, message=FALSE}
 # Pts per shot vs shot distance for different shot types 
 avg_pts_distance <- wnba_shots_data %>%
