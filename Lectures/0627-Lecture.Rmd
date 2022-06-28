@@ -376,6 +376,20 @@ OLS estimates in matrix notation ( $\boldsymbol{X}$ is a $n \times p$ matrix):
   
 $$\hat{\boldsymbol{\beta}} = (\boldsymbol{X} ^T \boldsymbol{X})^{-1}\boldsymbol{X}^T\boldsymbol{Y}$$
 
+## No Y intercept if it doesn't make sense
+
+```{r}
+init_lm_no_y <- lm(life_expectancy ~ 0 + log_gdp, #<<
+              data = clean_gapminder) #<<
+
+clean_gapminder %>%
+  mutate(pred_vals = predict(init_lm_no_y)) %>% #<<
+  ggplot(aes(x = pred_vals,
+             y = life_expectancy)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw()
+```
 
 
 Can just add more variables to the formula in `R`
@@ -432,4 +446,8 @@ autoplot(multiple_lm, ncol = 4) + theme_bw() #<<
 ```
 
 - Standardized residuals = residuals `/ sd(`residuals`)` (see also `.std.resid` from `augment`)
+
+Q-Q plot: x axis is the theoretical quantiles as if the standard normal were true, y is the standard residuals of the actual data. want to see how actual matches the theoretical. at any point, should have observed a certain percentage of data, point is the actual amount of observed data.
+
+NOTE: EXTREMES/TAILS ARE THE MOST IMPORTANT
 
