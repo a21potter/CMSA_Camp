@@ -1,0 +1,484 @@
+---
+title: "0630-Lecture: Supervised Learning Continuation"
+subtitle: "Regularization Continuation"
+author: "Amber Potter"
+date: "6/30/2022"
+output: html_document
+---
+
+```{r setup, echo = FALSE, warning = FALSE, message = FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(fig.retina = 3, warning = FALSE, message = FALSE)
+```
+
+
+# From Yesterday 
+
+```{r}
+nfl_teams_data <- read_csv("http://www.stat.cmu.edu/cmsac/sure/2022/materials/data/sports/regression_examples/nfl_team_season_summary.csv")
+nfl_model_data <- nfl_teams_data %>%
+  mutate(score_diff = points_scored - points_allowed) %>%
+  # Only use rows with air yards
+  filter(season >= 2006) %>%
+  dplyr::select(-wins, -losses, -ties, -points_scored, -points_allowed, -season, -team)
+```
+
+
+
+### Do running statistics matter for modeling score differential?
+
+
+Will use __5-fold cross-validation__ to assess how well different sets of variables (combinations of `pass` & `run` variables) perform in predicting `score_diff`?
+
+
+Can initialize a column of the __test__ fold assignments to our dataset with the `sample()` function:
+```{r init-folds}
+set.seed(2020)
+nfl_model_data <- nfl_model_data %>%
+  mutate(test_fold = sample(rep(1:5, length.out = n())))
+```
+
+
+__Always remember to set your seed prior to any k-fold cross-validation!__
+
+
+## Writing a function for k-fold cross-validation
+
+```{r}
+get_cv_preds <- function(model_formula, data = nfl_model_data) {
+  # generate holdout predictions for every row based season
+  map_dfr(unique(data$test_fold), 
+          function(holdout_i) {
+            # Separate test and training data:
+            test_data <- data %>%
+              filter(test_fold == holdout_i)
+            train_data <- data %>%
+              filter(test_fold != holdout_i)
+            
+            # Train model:
+            reg_model <- lm(as.formula(model_formula), data = train_data)
+            
+            # Return tibble of holdout results:
+            tibble(test_preds = predict(reg_model, newdata = test_data),
+                   test_actual = test_data$score_diff,
+                   test_fold = holdout_i) 
+          })
+}
+
+```
+
+
+## Function enables easy generation of holdout analysis
+
+```{r}
+all_cv_preds <- get_cv_preds("score_diff ~  
+                             offense_ave_epa_pass + offense_ave_epa_run + defense_ave_epa_pass + defense_ave_epa_run")
+all_int_cv_preds <- get_cv_preds("score_diff ~ 
+                                 offense_ave_epa_pass*offense_ave_epa_run + defense_ave_epa_pass*defense_ave_epa_run")
+run_only_cv_preds <- get_cv_preds("score_diff ~ 
+                                  offense_ave_epa_run + defense_ave_epa_run")
+pass_only_cv_preds <- get_cv_preds("score_diff ~ 
+                                   offense_ave_epa_pass + defense_ave_epa_pass")
+off_only_cv_preds <- get_cv_preds("score_diff ~ 
+                                  offense_ave_epa_pass + offense_ave_epa_run")
+def_only_cv_preds <- get_cv_preds("score_diff ~ 
+                                  defense_ave_epa_pass + defense_ave_epa_run")
+int_only_cv_preds <- get_cv_preds("score_diff ~ 1")
+```
+
+
+Can then summarize together for a single plot:
+```{r five-fold}
+bind_rows(mutate(all_cv_preds, type = "All"),
+          mutate(all_int_cv_preds, type = "All w/ interactions"),
+          mutate(pass_only_cv_preds, type = "Passing only"),
+          mutate(run_only_cv_preds, type = "Running only"),
+          mutate(off_only_cv_preds, type = "Offense only"),
+          mutate(def_only_cv_preds, type = "Defense only"),
+          mutate(int_only_cv_preds, type = "Intercept-only")) %>%
+  group_by(type) %>%
+  summarize(rmse = sqrt(mean((test_actual - test_preds)^2))) %>% #rmse makes it interpretable, uses original unit
+  mutate(type = fct_reorder(type, rmse)) %>%
+  ggplot(aes(x = type, y = rmse)) +
+     geom_bar(stat = "identity") + 
+     coord_flip() + 
+     theme_bw()
+
+
+# shor variation in holdout performance for each fold
+bind_rows(mutate(all_cv_preds, type = "All"),
+          mutate(all_int_cv_preds, type = "All w/ interactions"),
+          mutate(pass_only_cv_preds, type = "Passing only"),
+          mutate(run_only_cv_preds, type = "Running only"),
+          mutate(off_only_cv_preds, type = "Offense only"),
+          mutate(def_only_cv_preds, type = "Defense only"),
+          mutate(int_only_cv_preds, type = "Intercept-only")) %>%
+  group_by(type, test_fold) %>%
+  summarize(rmse = sqrt(mean((test_actual - test_preds)^2))) %>% #rmse makes it interpretable, uses original unit
+  mutate(type = fct_reorder(type, rmse)) %>%
+  ggplot(aes(x = type, y = rmse)) +
+     geom_point() + 
+     coord_flip() + 
+     theme_bw()
+```
+
+
+## Fit selected model on all data and view summary
+
+```{r}
+all_lm <- lm(score_diff ~ offense_ave_epa_pass + offense_ave_epa_run + defense_ave_epa_pass + defense_ave_epa_run, data = nfl_model_data)
+summary(all_lm)
+```
+
+
+## Do NOT show that summary in a presentation!
+
+
+```{r ggcoef}
+ggcoef(all_lm, 
+       exclude_intercept = TRUE,
+       vline = TRUE,
+       vline_color = "red") + 
+  theme_bw()
+```
+
+
+# Today
+
+
+## Caveats to consider...
+
+- For either ridge, lasso, or elastic net: __you should standardize your data__
+
+- Common convention: within each column, compute then subtract off the sample mean, and compute the divide off the sample standard deviation:
+
+$$\tilde{x}_{ij} = \frac{x_{ij} - \bar{x}_j}{s_{x,j}}$$
+
+- [`glmnet`](https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html) package does this by default and reports coefficients on the original scale
+
+
+- $\lambda$ and $\alpha$ are __tuning parameters__
+
+- Have to select appropriate values based on test data / cross-validation
+
+- When using `glmnet`, the `cv.glmnet()` function will perform the cross-validation for you
+
+# Purpose: fit models with regularization
+
+## Example data: NFL teams summary
+
+Created dataset using [`nflfastR`](https://www.nflfastr.com/) summarizing NFL team performances from 1999 to 2021
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+nfl_teams_data <- read_csv("http://www.stat.cmu.edu/cmsac/sure/2022/materials/data/sports/regression_examples/nfl_team_season_summary.csv")
+nfl_model_data <- nfl_teams_data %>%
+  mutate(score_diff = points_scored - points_allowed) %>%
+  # Only use rows with air yards
+  filter(season >= 2006) %>%
+  dplyr::select(-wins, -losses, -ties, -points_scored, -points_allowed, -season, -team)
+```
+
+
+
+## Introduction to `glmnet`
+
+We will use the [`glmnet`](https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html#lin) package for ridge, lasso, and elastic net
+
+```{r load-glmnet}
+library(glmnet)
+```
+
+
+
+__Important__: `glmnet` does NOT use formula but instead `x` matrix of predictors and `y` vector of response
+
+- could use the `model.matrix()` function (which converts factors to 0-1 dummy variables!)
+
+```{r model-matrix}
+model_x <- nfl_model_data %>%
+  dplyr::select(-score_diff) %>%
+  as.matrix()
+
+
+# alternate methods of doing the above
+# model_x <- model.matrix(score_diff ~ ., nfl_model_data)[, -1] 
+# or 
+# model_x <- model.matrix(score_diff ~ 0 + ., nfl_model_data)
+
+
+model_y <- nfl_model_data$score_diff
+#or
+# model_y = nfl_model_data %>%
+#    pull(score_diff)
+```
+
+
+
+
+## Initial model with `lm()`
+
+
+
+
+- What do the initial regression coefficients look like?
+
+- Use [`broom`](https://broom.tidymodels.org/reference/tidy.cv.glmnet.html) to tidy model output for plotting
+
+```{r init-lm}
+init_reg_fit <- lm(score_diff ~ ., nfl_model_data)
+library(broom)
+tidy(init_reg_fit) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(coef_sign = as.factor(sign(estimate)),
+         term = fct_reorder(term, estimate)) %>%
+  ggplot(aes(x = term, y = estimate, fill = coef_sign)) +
+  geom_bar(stat = "identity", color = "white") +
+  scale_fill_manual(values = c("darkred", "darkblue"), 
+                    guide = FALSE) +
+  coord_flip() + 
+  theme_bw()
+```
+
+
+
+## Ridge regression example
+
+Perform ridge regression using `glmnet` with `alpha = 0` (more on that later)
+
+By default it standardizes your predictors and fits model across a range of $\lambda$ values (can plot these!)
+
+NOTE: number of variables in the model appear across the top
+  
+```{r init-ridge-ex, fig.align='center', fig.height=5}
+init_ridge_fit <- glmnet(model_x, model_y, alpha = 0)#<<
+plot(init_ridge_fit, xvar = "lambda")#<<
+```
+
+
+
+## Ridge regression example
+
+We use cross-validation to select $\lambda$ with `cv.glmnet()` which uses 10-folds by default
+
+- specify ridge regression with `alpha = 0`
+
+```{r ridge-ex, fig.align='center', fig.height=5}
+fit_ridge_cv <- cv.glmnet(model_x, model_y, alpha = 0) #<<
+plot(fit_ridge_cv)
+```
+
+NOTES: Second dashed line is the one standard error line where the red dot at that point is within one standard deviation of the minimum. This prevents over fitting on training data. The standard error bars are the MSE across each model divided by the number of folds. (default 10 folds)
+
+## Tidy ridge regression
+
+```{r tidy-ridge-ex}
+tidy_ridge_coef <- tidy(fit_ridge_cv$glmnet.fit) #<<
+tidy_ridge_coef %>%
+  ggplot(aes(x = lambda, y = estimate, 
+             group = term)) +
+  scale_x_log10() +
+  geom_line(alpha = 0.75) +
+  geom_vline(xintercept = 
+               fit_ridge_cv$lambda.min) +
+  geom_vline(xintercept = 
+               fit_ridge_cv$lambda.1se, 
+             linetype = "dashed", color = "red") +
+  theme_bw()
+```
+
+- Could easily add color with legend for variables...
+
+
+
+## Tidy ridge regression
+
+
+```{r tidy-ridge-ex2, eval = FALSE}
+tidy_ridge_cv <- tidy(fit_ridge_cv)
+tidy_ridge_cv %>%
+  ggplot(aes(x = lambda, y = estimate)) +
+  geom_line() + scale_x_log10() +
+  geom_ribbon(aes(ymin = conf.low,
+                  ymax = conf.high), alpha = .25) +
+  geom_vline(xintercept = 
+               fit_ridge_cv$lambda.min) +
+  geom_vline(xintercept = 
+               fit_ridge_cv$lambda.1se,
+             linetype = "dashed", color = "red") +
+  theme_bw()
+```
+
+
+
+## Lasso regression example
+
+
+
+
+Similar syntax to ridge but specify `alpha = 1`:
+
+```{r lasso-ex}
+fit_lasso_cv <- cv.glmnet(model_x, model_y, 
+                          alpha = 1) #<<
+plot(fit_lasso_cv)
+
+
+tidy_lasso_coef <- tidy(fit_lasso_cv$glmnet.fit) # produces a glmnet model object
+
+tidy_lasso_coef %>%
+  ggplot(aes(x = lambda, y = estimate, 
+             group = term)) +
+  scale_x_log10() + # change x axis to be on log base 10 scale
+  geom_line(alpha = 0.75) +
+  geom_vline(xintercept = 
+               fit_lasso_cv$lambda.min) + # gives lambda minimum (left line)
+  geom_vline(xintercept = 
+               fit_lasso_cv$lambda.1se, # gives 1 standard error (right line)
+             linetype = "dashed", color = "red") +
+  theme_bw()
+```
+
+
+## Lasso regression example
+
+Number of non-zero predictors by $\lambda$
+
+```{r lasso-zero}
+tidy_lasso_cv <- tidy(fit_lasso_cv)
+tidy_lasso_cv %>%
+  ggplot(aes(x = lambda, y = nzero)) +
+  geom_line() +
+  geom_vline(xintercept = fit_lasso_cv$lambda.min) +
+  geom_vline(xintercept = fit_lasso_cv$lambda.1se, 
+             linetype = "dashed", color = "red") +
+  scale_x_log10() + theme_bw()
+```
+
+Reduction in variables using __1 standard error rule__ $\lambda$
+
+
+## Lasso regression example
+
+Coefficients using the __1 standard error rule__ $\lambda$
+
+```{r lasso-coef-ex}
+tidy_lasso_coef %>%
+  filter(lambda == fit_lasso_cv$lambda.1se) %>%
+  mutate(coef_sign = as.factor(sign(estimate)),
+         term = fct_reorder(term, estimate)) %>%
+  ggplot(aes(x = term, y = estimate, 
+             fill = coef_sign)) +
+  geom_bar(stat = "identity", color = "white") +
+  scale_fill_manual(values = c("darkred", "darkblue"), 
+                    guide = FALSE) +
+  coord_flip() +
+  theme_bw()
+```
+
+
+
+## Elastic net example
+
+Need to tune both $\lambda$ and $\alpha$ - can do so manually with our own folds
+
+```{r}
+set.seed(2020)
+fold_id <- sample(rep(1:10, length.out = nrow(model_x)))
+```
+
+Then use cross-validation with these folds for different candidate `alpha` values:
+
+```{r}
+cv_en_25 <- cv.glmnet(model_x, model_y, foldid = fold_id, alpha = .25)
+cv_en_50 <- cv.glmnet(model_x, model_y, foldid = fold_id, alpha = .5)
+cv_ridge <- cv.glmnet(model_x, model_y, foldid = fold_id, alpha = 0)
+cv_lasso <- cv.glmnet(model_x, model_y, foldid = fold_id, alpha = 1)
+```
+
+Can see which one had the lowest CV error among its candidate $\lambda$ values:
+
+```{r}
+which.min(c(min(cv_en_25$cvm), min(cv_en_50$cvm), min(cv_ridge$cvm), min(cv_lasso$cvm)))
+```
+
+
+
+## Elastic net example
+
+
+
+Can view same type of summary
+
+```{r en-zero}
+tidy(cv_en_50) %>%
+  ggplot(aes(x = lambda, y = nzero)) +
+  geom_line() +
+  geom_vline(xintercept = cv_en_50$lambda.min) +
+  geom_vline(xintercept = cv_en_50$lambda.1se, 
+             linetype = "dashed", 
+             color = "red") +
+  scale_x_log10() + 
+  theme_bw()
+```
+
+- More relaxed than lasso for variable entry
+
+
+#### Comparison of models based on holdout performance
+
+```{r}
+set.seed(2020)
+nfl_model_data <- nfl_model_data %>% mutate(test_fold = sample(rep(1:5, length.out = n())))
+holdout_predictions <- 
+  map_dfr(unique(nfl_model_data$test_fold), 
+          function(holdout) {
+            # Separate test and training data:
+            test_data <- nfl_model_data %>% filter(test_fold == holdout)
+            train_data <- nfl_model_data %>% filter(test_fold != holdout)
+            
+            # Repeat for matrices
+            test_x <- as.matrix(dplyr::select(test_data, -score_diff))
+            train_x <- as.matrix(dplyr::select(train_data, -score_diff))
+
+            # Train models:
+            lm_model <- lm(score_diff ~ ., data = train_data)
+            ridge_model <- cv.glmnet(train_x, train_data$score_diff, alpha = 0)
+            lasso_model <- cv.glmnet(train_x, train_data$score_diff, alpha = 1)
+            en_model <- cv.glmnet(train_x, train_data$score_diff, alpha = .5)
+
+            # Return tibble of holdout results:
+            tibble(lm_preds = predict(lm_model, newdata = test_data),
+                   ridge_preds = as.numeric(predict(ridge_model, newx = test_x)),
+                   lasso_preds = as.numeric(predict(lasso_model, newx = test_x)),
+                   en_preds = as.numeric(predict(en_model, newx = test_x)),
+                   test_actual = test_data$score_diff, test_fold = holdout) 
+          })
+```
+
+
+
+## Predictions compared to `lm`?
+
+
+Compute RMSE across folds with std error intervals
+
+```{r five-fold}
+holdout_predictions %>%
+  pivot_longer(lm_preds:en_preds, 
+               names_to = "type", values_to = "test_preds") %>%
+  group_by(type, test_fold) %>%
+  summarize(rmse =
+              sqrt(mean((test_actual - test_preds)^2))) %>% 
+  ggplot(aes(x = type, y = rmse)) + 
+  geom_point() + theme_bw() +
+  stat_summary(fun = mean, geom = "point", 
+               color = "red") + 
+  stat_summary(fun.data = mean_se, geom = "errorbar",
+               color = "red")
+```
+
+
+In this case `lm` actually "beat" regularization, but within intervals
+
+NOTE: flaw with above regression fits is that they are tuned and tested with same data; should tune and test on different data
