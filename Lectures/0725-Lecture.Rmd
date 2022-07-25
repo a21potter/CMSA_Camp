@@ -512,3 +512,74 @@ ep_cv_loso_calibration_results %>%
         legend.position = c(1, .05), legend.justification = c(1, 0)) +
   facet_wrap(~ next_score_type, ncol = 4)
 ```
+
+# Fitting XGBoost Example MLB
+
+
+## Example data: MLB 2022 batting statistics
+
+Downloaded MLB 2022 batting statistics leaderboard from [Fangraphs](https://www.fangraphs.com/leaders.aspx?pos=all&stats=bat&lg=all&qual=y&type=8&season=2022&month=0&season1=2022&ind=0)
+
+```{r load-data, warning = FALSE, message = FALSE}
+mlb_data <- read_csv("http://www.stat.cmu.edu/cmsac/sure/2022/materials/data/sports/fg_batting_2022.csv") %>%
+  janitor::clean_names() %>%
+  mutate_at(vars(bb_percent:k_percent), parse_number)
+model_mlb_data <- mlb_data %>%
+  dplyr::select(-name, -team, -playerid)
+head(model_mlb_data)
+```
+
+## Fitting XGBoost
+
+```{r, message = FALSE, warning = FALSE}
+library(xgboost)
+library(caret)
+xgboost_tune_grid <- expand.grid(nrounds = seq(from = 20, to = 200, by = 20),
+                                 eta = c(0.025, 0.05, 0.1, 0.3), 
+                                 gamma = 0,
+                                 max_depth = c(1, 2, 3, 6),
+                                 colsample_bytree = 1,
+                                 min_child_weight = 1, 
+                                 subsample = 1)
+
+xgboost_tune_control <- trainControl(method = "cv", 
+                                     number = 5, 
+                                     verboseIter = FALSE)
+
+set.seed(1937)
+xgb_tune <- train(x = as.matrix(dplyr::select(model_mlb_data, -war)),
+                  y = model_mlb_data$war, 
+                  trControl = xgboost_tune_control,
+                  tuneGrid = xgboost_tune_grid, 
+                  objective = "reg:squarederror", method = "xgbTree",
+                  verbose = TRUE)
+xgb_tune$bestTune
+xgb_tune$finalModel
+```
+
+---
+
+## XGBoost example
+
+```{r, fig.align='center', fig.height=5, message = FALSE, warning = FALSE}
+xgb_fit_final <- xgboost(data = as.matrix(dplyr::select(model_mlb_data, -war)),
+                         label = model_mlb_data$war, 
+                         objective = "reg:squarederror",
+                         nrounds = xgb_tune$bestTune$nrounds,
+                         params = as.list(dplyr::select(xgb_tune$bestTune,
+                                                        -nrounds)), 
+                         verbose = 0)
+
+
+library(vip)
+vip(xgb_fit_final) + theme_bw()
+```
+
+## XGBoost example
+
+```{r, fig.align='center', fig.height=6}
+library(pdp)
+partial(xgb_fit_final, pred.var = "off", train = as.matrix(dplyr::select(model_mlb_data, -war)),
+        plot.engine = "ggplot2", plot = TRUE,
+        type = "regression") + theme_bw()
+```
